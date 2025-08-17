@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Canvas - Code Blocks</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Controls -->
+        <div class="header-controls">
+            <button id="toggleConnections" class="btn">Toggle Connections</button>
+            <button id="addBlock" class="btn btn-primary">Add Code Block</button>
+            <button id="clearAll" class="btn btn-danger">Clear All</button>
+        </div>
+
+        <!-- Canvas Container -->
+        <div id="canvasContainer" class="canvas-container">
+            <div id="canvasTransform" class="canvas-transform">
+                <!-- Column Headers -->
+                <div class="column-header" style="left: 50px;">HTML</div>
+                <div class="column-header" style="left: 450px;">JavaScript</div>
+                <div class="column-header" style="left: 850px;">CSS</div>
+                <div class="column-header" style="left: 1250px;">Other</div>
+                <div class="column-header" style="left: 1650px;">Versions</div>
+
+                <!-- Column Separators -->
+                <div class="column-separator" style="left: 350px;"></div>
+                <div class="column-separator" style="left: 750px;"></div>
+                <div class="column-separator" style="left: 1150px;"></div>
+                <div class="column-separator" style="left: 1550px;"></div>
+
+                <!-- Connection Lines SVG -->
+                <svg id="connectionLines" class="connection-lines">
+                    <!-- Lines will be added dynamically -->
+                </svg>
+
+                <!-- Code Blocks Container -->
+                <div id="codeBlocksContainer">
+                    <!-- Code blocks will be added dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Zoom Controls -->
+        <div class="mobile-zoom-controls">
+            <button id="zoomIn" class="zoom-btn">+</button>
+            <button id="zoomOut" class="zoom-btn">−</button>
+            <button id="resetView" class="zoom-btn">⌂</button>
+            <span id="zoomLevel" class="zoom-level">100%</span>
+        </div>
+    </div>
+
+    <!-- Code Block Template -->
+    <template id="codeBlockTemplate">
+        <div class="code-block-card">
+            <div class="code-block-header">
+                <span class="code-block-type"></span>
+                <input type="text" class="code-block-title" placeholder="Enter title...">
+                <button class="code-block-close">×</button>
+            </div>
+            <div class="code-block-body">
+                <textarea class="code-block-prompt" placeholder="Enter prompt..."></textarea>
+                <textarea class="code-block-code" placeholder="Enter code..."></textarea>
+            </div>
+            <div class="code-block-footer">
+                <span class="code-block-version">v1</span>
+                <button class="code-block-duplicate">Duplicate</button>
+                <span class="code-block-date"></span>
+            </div>
+        </div>
+    </template>
+
+    <script src="script.js"></script>
+</body>
+</html>
