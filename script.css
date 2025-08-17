@@ -1,0 +1,483 @@
+// Global State
+let codeBlocks = [];
+let showConnections = true;
+let transform = { x: 0, y: 0, scale: 1 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let lastTouch = null;
+let initialDistance = null;
+let initialScale = 1;
+let blockIdCounter = 0;
+let currentDraggingBlock = null;
+let blockDragOffset = { x: 0, y: 0 };
+
+// Column positions
+const COLUMNS = {
+    html: 50,
+    javascript: 450,
+    css: 850,
+    other: 1250,
+    versions: 1650
+};
+
+// DOM Elements
+const canvasContainer = document.getElementById('canvasContainer');
+const canvasTransform = document.getElementById('canvasTransform');
+const codeBlocksContainer = document.getElementById('codeBlocksContainer');
+const connectionLines = document.getElementById('connectionLines');
+const toggleConnectionsBtn = document.getElementById('toggleConnections');
+const addBlockBtn = document.getElementById('addBlock');
+const clearAllBtn = document.getElementById('clearAll');
+const zoomInBtn = document.getElementById('zoomIn');
+const zoomOutBtn = document.getElementById('zoomOut');
+const resetViewBtn = document.getElementById('resetView');
+const zoomLevel = document.getElementById('zoomLevel');
+
+// Initialize
+function init() {
+    setupEventListeners();
+    loadBlocksFromStorage();
+    updateCanvas();
+}
+
+// Event Listeners
+function setupEventListeners() {
+    // Canvas drag
+    canvasContainer.addEventListener('mousedown', handleCanvasMouseDown);
+    canvasContainer.addEventListener('mousemove', handleCanvasMouseMove);
+    canvasContainer.addEventListener('mouseup', handleCanvasMouseUp);
+    canvasContainer.addEventListener('mouseleave', handleCanvasMouseUp);
+    canvasContainer.addEventListener('wheel', handleWheel);
+    
+    // Touch events
+    canvasContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvasContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvasContainer.addEventListener('touchend', handleTouchEnd);
+    
+    // Controls
+    toggleConnectionsBtn.addEventListener('click', toggleConnections);
+    addBlockBtn.addEventListener('click', addNewBlock);
+    clearAllBtn.addEventListener('click', clearAllBlocks);
+    zoomInBtn.addEventListener('click', zoomIn);
+    zoomOutBtn.addEventListener('click', zoomOut);
+    resetViewBtn.addEventListener('click', resetView);
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyboard);
+}
+
+// Canvas Pan & Zoom
+function handleCanvasMouseDown(e) {
+    if (e.target.closest('.code-block-card')) return;
+    
+    isDragging = true;
+    dragStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+    canvasContainer.classList.add('dragging');
+}
+
+function handleCanvasMouseMove(e) {
+    if (!isDragging) return;
+    
+    transform.x = e.clientX - dragStart.x;
+    transform.y = e.clientY - dragStart.y;
+    updateCanvas();
+}
+
+function handleCanvasMouseUp() {
+    isDragging = false;
+    canvasContainer.classList.remove('dragging');
+}
+
+function handleWheel(e) {
+    e.preventDefault();
+    
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.1, Math.min(3, transform.scale * delta));
+    
+    const rect = canvasContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const scaleRatio = newScale / transform.scale;
+    transform.x = x - (x - transform.x) * scaleRatio;
+    transform.y = y - (y - transform.y) * scaleRatio;
+    transform.scale = newScale;
+    
+    updateCanvas();
+}
+
+// Touch Handlers
+function handleTouchStart(e) {
+    if (e.target.closest('.code-block-card')) return;
+    
+    e.preventDefault();
+    
+    if (e.touches.length === 1) {
+        isDragging = true;
+        lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+        isDragging = false;
+        initialDistance = getDistance(e.touches[0], e.touches[1]);
+        initialScale = transform.scale;
+    }
+}
+
+function handleTouchMove(e) {
+    if (e.target.closest('.code-block-card')) return;
+    
+    e.preventDefault();
+    
+    if (e.touches.length === 1 && isDragging && lastTouch) {
+        const deltaX = e.touches[0].clientX - lastTouch.x;
+        const deltaY = e.touches[0].clientY - lastTouch.y;
+        
+        transform.x += deltaX;
+        transform.y += deltaY;
+        
+        lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        updateCanvas();
+    } else if (e.touches.length === 2 && initialDistance) {
+        const distance = getDistance(e.touches[0], e.touches[1]);
+        const scale = (distance / initialDistance) * initialScale;
+        transform.scale = Math.max(0.1, Math.min(3, scale));
+        updateCanvas();
+    }
+}
+
+function handleTouchEnd() {
+    isDragging = false;
+    lastTouch = null;
+    initialDistance = null;
+}
+
+function getDistance(touch1, touch2) {
+    return Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) +
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+    );
+}
+
+// Zoom Controls
+function zoomIn() {
+    transform.scale = Math.min(3, transform.scale * 1.3);
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    
+    const scaleRatio = 1.3;
+    transform.x = centerX - (centerX - transform.x) * scaleRatio;
+    transform.y = centerY - (centerY - transform.y) * scaleRatio;
+    
+    updateCanvas();
+}
+
+function zoomOut() {
+    transform.scale = Math.max(0.1, transform.scale * 0.75);
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    
+    const scaleRatio = 0.75;
+    transform.x = centerX - (centerX - transform.x) * scaleRatio;
+    transform.y = centerY - (centerY - transform.y) * scaleRatio;
+    
+    updateCanvas();
+}
+
+function resetView() {
+    if (codeBlocks.length > 0) {
+        const firstBlock = codeBlocks[0];
+        transform = {
+            x: -firstBlock.position.x + window.innerWidth / 2 - 160,
+            y: -firstBlock.position.y + window.innerHeight / 2 - 200,
+            scale: 1
+        };
+    } else {
+        transform = { x: 0, y: 0, scale: 1 };
+    }
+    updateCanvas();
+}
+
+// Code Block Management
+function addNewBlock() {
+    const types = ['html', 'javascript', 'css', 'other'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const columnX = COLUMNS[type];
+    
+    const existingInColumn = codeBlocks.filter(b => {
+        const blockColumn = getColumnForType(b.type);
+        return Math.abs(b.position.x - blockColumn) < 100;
+    });
+    
+    const y = existingInColumn.length > 0 
+        ? Math.max(...existingInColumn.map(b => b.position.y)) + 350
+        : 150;
+    
+    const block = {
+        id: `block-${++blockIdCounter}`,
+        type: type,
+        title: `New ${type.toUpperCase()} Block`,
+        prompt: '',
+        code: '',
+        version: 1,
+        position: { x: columnX, y: y },
+        createdAt: new Date().toISOString()
+    };
+    
+    codeBlocks.push(block);
+    createBlockElement(block);
+    saveBlocksToStorage();
+    updateConnections();
+}
+
+function getColumnForType(type) {
+    return COLUMNS[type] || COLUMNS.other;
+}
+
+function createBlockElement(block) {
+    const template = document.getElementById('codeBlockTemplate');
+    const clone = template.content.cloneNode(true);
+    const element = clone.querySelector('.code-block-card');
+    
+    element.id = block.id;
+    element.style.left = block.position.x + 'px';
+    element.style.top = block.position.y + 'px';
+    
+    // Set content
+    element.querySelector('.code-block-type').textContent = block.type.toUpperCase();
+    element.querySelector('.code-block-title').value = block.title;
+    element.querySelector('.code-block-prompt').value = block.prompt;
+    element.querySelector('.code-block-code').value = block.code;
+    element.querySelector('.code-block-version').textContent = `v${block.version}`;
+    element.querySelector('.code-block-date').textContent = new Date(block.createdAt).toLocaleDateString();
+    
+    // Event listeners
+    element.querySelector('.code-block-close').addEventListener('click', () => removeBlock(block.id));
+    element.querySelector('.code-block-duplicate').addEventListener('click', () => duplicateBlock(block.id));
+    
+    // Input listeners
+    element.querySelector('.code-block-title').addEventListener('input', (e) => {
+        block.title = e.target.value;
+        saveBlocksToStorage();
+    });
+    
+    element.querySelector('.code-block-prompt').addEventListener('input', (e) => {
+        block.prompt = e.target.value;
+        saveBlocksToStorage();
+    });
+    
+    element.querySelector('.code-block-code').addEventListener('input', (e) => {
+        block.code = e.target.value;
+        saveBlocksToStorage();
+    });
+    
+    // Drag functionality
+    setupBlockDrag(element, block);
+    
+    codeBlocksContainer.appendChild(element);
+}
+
+function setupBlockDrag(element, block) {
+    const header = element.querySelector('.code-block-header');
+    
+    header.addEventListener('mousedown', (e) => {
+        currentDraggingBlock = { element, block };
+        const rect = element.getBoundingClientRect();
+        const canvasRect = canvasContainer.getBoundingClientRect();
+        
+        blockDragOffset = {
+            x: (e.clientX - canvasRect.left) / transform.scale - block.position.x,
+            y: (e.clientY - canvasRect.top) / transform.scale - block.position.y
+        };
+        
+        element.classList.add('dragging');
+        e.stopPropagation();
+    });
+}
+
+document.addEventListener('mousemove', (e) => {
+    if (!currentDraggingBlock) return;
+    
+    const canvasRect = canvasContainer.getBoundingClientRect();
+    const x = (e.clientX - canvasRect.left - transform.x) / transform.scale - blockDragOffset.x;
+    const y = (e.clientY - canvasRect.top - transform.y) / transform.scale - blockDragOffset.y;
+    
+    currentDraggingBlock.block.position = { x, y };
+    currentDraggingBlock.element.style.left = x + 'px';
+    currentDraggingBlock.element.style.top = y + 'px';
+    
+    updateConnections();
+});
+
+document.addEventListener('mouseup', () => {
+    if (currentDraggingBlock) {
+        currentDraggingBlock.element.classList.remove('dragging');
+        saveBlocksToStorage();
+        currentDraggingBlock = null;
+    }
+});
+
+function removeBlock(id) {
+    codeBlocks = codeBlocks.filter(b => b.id !== id);
+    const element = document.getElementById(id);
+    if (element) element.remove();
+    saveBlocksToStorage();
+    updateConnections();
+}
+
+function duplicateBlock(id) {
+    const original = codeBlocks.find(b => b.id === id);
+    if (!original) return;
+    
+    const duplicate = {
+        ...original,
+        id: `block-${++blockIdCounter}`,
+        position: {
+            x: original.position.x + 50,
+            y: original.position.y + 50
+        },
+        version: original.version + 1,
+        createdAt: new Date().toISOString()
+    };
+    
+    codeBlocks.push(duplicate);
+    createBlockElement(duplicate);
+    saveBlocksToStorage();
+    updateConnections();
+}
+
+function clearAllBlocks() {
+    if (!confirm('Are you sure you want to clear all blocks?')) return;
+    
+    codeBlocks = [];
+    codeBlocksContainer.innerHTML = '';
+    saveBlocksToStorage();
+    updateConnections();
+}
+
+// Connections
+function toggleConnections() {
+    showConnections = !showConnections;
+    toggleConnectionsBtn.textContent = showConnections ? 'Hide Connections' : 'Show Connections';
+    updateConnections();
+}
+
+function updateConnections() {
+    connectionLines.innerHTML = '';
+    
+    if (!showConnections) return;
+    
+    // Group blocks by title
+    const groups = {};
+    codeBlocks.forEach(block => {
+        const key = `${block.type}-${block.title}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(block);
+    });
+    
+    // Draw lines between related blocks
+    Object.values(groups).forEach(group => {
+        if (group.length < 2) return;
+        
+        for (let i = 0; i < group.length - 1; i++) {
+            const from = group[i];
+            const to = group[i + 1];
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const x1 = from.position.x + 160;
+            const y1 = from.position.y + 100;
+            const x2 = to.position.x + 160;
+            const y2 = to.position.y + 100;
+            
+            const cx = (x1 + x2) / 2;
+            const cy = (y1 + y2) / 2;
+            
+            const d = `M ${x1} ${y1} Q ${cx} ${y1}, ${cx} ${cy} T ${x2} ${y2}`;
+            line.setAttribute('d', d);
+            line.setAttribute('class', 'connection-line');
+            
+            connectionLines.appendChild(line);
+        }
+    });
+}
+
+// Canvas Update
+function updateCanvas() {
+    canvasTransform.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+    zoomLevel.textContent = `${Math.round(transform.scale * 100)}%`;
+}
+
+// Storage
+function saveBlocksToStorage() {
+    localStorage.setItem('infiniteCanvasBlocks', JSON.stringify(codeBlocks));
+}
+
+function loadBlocksFromStorage() {
+    const stored = localStorage.getItem('infiniteCanvasBlocks');
+    if (stored) {
+        try {
+            codeBlocks = JSON.parse(stored);
+            codeBlocks.forEach(block => {
+                createBlockElement(block);
+                blockIdCounter = Math.max(blockIdCounter, parseInt(block.id.split('-')[1] || 0));
+            });
+            updateConnections();
+            
+            if (codeBlocks.length > 0) {
+                setTimeout(resetView, 100);
+            }
+        } catch (e) {
+            console.error('Failed to load blocks:', e);
+        }
+    }
+}
+
+// Keyboard Shortcuts
+function handleKeyboard(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    switch(e.key) {
+        case 'a':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                addNewBlock();
+            }
+            break;
+        case '+':
+        case '=':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                zoomIn();
+            }
+            break;
+        case '-':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                zoomOut();
+            }
+            break;
+        case '0':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                resetView();
+            }
+            break;
+        case 'ArrowUp':
+            transform.y += 50;
+            updateCanvas();
+            break;
+        case 'ArrowDown':
+            transform.y -= 50;
+            updateCanvas();
+            break;
+        case 'ArrowLeft':
+            transform.x += 50;
+            updateCanvas();
+            break;
+        case 'ArrowRight':
+            transform.x -= 50;
+            updateCanvas();
+            break;
+    }
+}
+
+// Initialize the app
+init();
